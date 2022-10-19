@@ -175,7 +175,20 @@ defmodule Indexer.Fetcher.InternalTransaction do
 
           transactions ->
             try do
-              EthereumJSONRPC.fetch_internal_transactions(transactions, json_rpc_named_arguments)
+#              EthereumJSONRPC.fetch_internal_transactions(transactions, json_rpc_named_arguments)
+              chunkedTransactions = Enum.chunk_every(transactions, 50)
+              tasks = Enum.map(chunkedTransactions, fn(x)-> Task.async(fn ->
+                EthereumJSONRPC.fetch_internal_transactions(
+                  x,
+                  json_rpc_named_arguments
+                )
+              end) end)
+              fetchedResults = Enum.map(tasks, fn(t) -> Task.await(t, 50000) end)
+              formattedResults = Enum.reduce(fetchedResults, [],fn(d, acc) ->
+                {:ok, result} = d
+                acc ++ result
+              end)
+              {:ok, formattedResults}
             catch
               :exit, error ->
                 {:error, error}
